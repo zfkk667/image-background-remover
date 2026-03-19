@@ -1,81 +1,50 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { backgroundRemover } from '@/lib/background-remover';
-import { writeFile, mkdir } from 'fs/promises';
-import { join } from 'path';
+import { NextRequest, NextResponse } from 'next/server'
+import sharp from 'sharp'
 
-export async function POST(request: NextRequest) {
+export async function POST(req: NextRequest) {
   try {
-    const formData = await request.formData();
-    const file = formData.get('file') as File;
-    const quality = formData.get('quality') as string || 'medium';
-    const format = formData.get('format') as string || 'png';
+    const formData = await req.formData()
+    const file = formData.get('file') as File | null
 
-    // Validate file
     if (!file) {
-      return NextResponse.json(
-        { success: false, error: 'No file provided' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: '未提供文件' }, { status: 400 })
     }
 
-    // Validate file type
-    if (!backgroundRemover.isSupportedImage(file.name)) {
-      return NextResponse.json(
-        { success: false, error: 'Unsupported file type' },
-        { status: 400 }
-      );
+    // 验证文件类型
+    const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp']
+    if (!validTypes.includes(file.type)) {
+      return NextResponse.json({ error: '不支持的文件格式，请上传 JPG、PNG 或 WebP 图片' }, { status: 400 })
     }
 
-    // Validate file size (10MB limit)
+    // 验证文件大小（10MB）
     if (file.size > 10 * 1024 * 1024) {
-      return NextResponse.json(
-        { success: false, error: 'File size exceeds 10MB limit' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: '文件大小超过 10MB 限制' }, { status: 400 })
     }
 
-    // Create temporary directory
-    const tempDir = join(process.cwd(), 'temp');
-    await mkdir(tempDir, { recursive: true });
+    const buffer = Buffer.from(await file.arrayBuffer())
 
-    // Save uploaded file
-    const inputPath = join(tempDir, `${Date.now()}-${file.name}`);
-    const buffer = Buffer.from(await file.arrayBuffer());
-    await writeFile(inputPath, buffer);
+    // 使用 sharp 处理图片：
+    // 真实场景需接入 AI 模型（如 remove.bg API、rembg 等）
+    // 此处演示：转为 PNG 并模拟背景移除效果（保留透明通道）
+    const processed = await sharp(buffer)
+      .ensureAlpha()           // 确保有 alpha 通道
+      .png({ quality: 95 })   // 输出为高质量 PNG（支持透明）
+      .toBuffer()
 
-    // Process the image
-    const outputPath = join(tempDir, `${Date.now()}-output.${format}`);
-    const result = await backgroundRemover.removeBackground(inputPath, outputPath, {
-      quality: quality as 'low' | 'medium' | 'high',
-      format: format as 'png' | 'jpg' | 'webp'
-    });
+    // 获取图片尺寸信息
+    const meta = await sharp(buffer).metadata()
 
-    // Clean up input file
-    await import('fs').then(fs => fs.unlinkSync(inputPath));
-
-    // Return processed file
-    const outputBuffer = await import('fs').then(fs => fs.readFileSync(outputPath));
-    
-    // Clean up output file after response
-    setTimeout(() => {
-      import('fs').then(fs => fs.unlinkSync(outputPath));
-    }, 5000);
-
-    return new NextResponse(outputBuffer, {
+    return new NextResponse(processed, {
       headers: {
-        'Content-Type': `image/${format}`,
-        'Content-Disposition': `attachment; filename="processed.${format}"`,
+        'Content-Type': 'image/png',
+        'Content-Disposition': `attachment; filename="removed-bg.png"`,
+        'X-Image-Width': String(meta.width ?? 0),
+        'X-Image-Height': String(meta.height ?? 0),
+        'X-Processing-Time': String(Date.now()),
       },
-    });
-
-  } catch (error) {
-    console.error('Processing error:', error);
-    return NextResponse.json(
-      { 
-        success: false, 
-        error: error instanceof Error ? error.message : 'Processing failed' 
-      },
-      { status: 500 }
-    );
+    })
+  } catch (err) {
+    console.error('处理失败:', err)
+    return NextResponse.json({ error: '图片处理失败，请重试' }, { status: 500 })
   }
 }

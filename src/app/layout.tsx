@@ -1,20 +1,15 @@
-import type { Metadata } from 'next';
-import './globals.css';
+import type { Metadata } from 'next'
+import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'Image Background Remover',
-  description: 'AI-powered image background removal tool',
-  keywords: ['image', 'background', 'removal', 'ai', 'photoshop'],
-};
+  title: 'AI 图片背景移除工具',
+  description: '一键智能移除图片背景，支持批量处理',
+}
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
-      <body>{children}</body>
+    <html lang="zh">
+      <body className="bg-gray-50 min-h-screen">{children}</body>
     </html>
-  );
+  )
 }

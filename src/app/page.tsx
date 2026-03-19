@@ -1,382 +1,329 @@
-'use client';
+'use client'
 
-import { useState, useRef } from 'react';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Progress } from '@/components/ui/progress';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { FileUpload } from '@/components/file-upload';
-import { ImageGrid } from '@/components/image-grid';
-import { ProcessingControls } from '@/components/processing-controls';
-import { formatFileSize, generateId } from '@/lib/utils';
+import { useState, useCallback, useRef } from 'react'
 
-interface ImageFile {
-  id: string;
-  name: string;
-  size: number;
-  type: string;
-  url: string;
-  processing: boolean;
-  completed: boolean;
-  error?: string;
+interface ImageItem {
+  id: string
+  file: File
+  originalUrl: string
+  resultUrl?: string
+  status: 'pending' | 'processing' | 'done' | 'error'
+  error?: string
+  progress: number
+}
+
+function formatSize(bytes: number) {
+  if (bytes < 1024) return bytes + ' B'
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
+  return (bytes / 1024 / 1024).toFixed(1) + ' MB'
 }
 
 export default function Home() {
-  const [files, setFiles] = useState<ImageFile[]>([]);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [selectedQuality, setSelectedQuality] = useState<'low' | 'medium' | 'high'>('medium');
-  const [selectedFormat, setSelectedFormat] = useState<'png' | 'jpg' | 'webp'>('png');
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  
-  const handleFileDrop = (files: FileList) => {
-    Array.from(files).forEach(file => {
-      if (validateFile(file)) {
-        const newFile: ImageFile = {
-          id: generateId(),
-          name: file.name,
-          size: file.size,
-          type: file.type,
-          url: URL.createObjectURL(file),
-          processing: false,
-          completed: false
-        };
-        setFiles(prev => [...prev, newFile]);
-      }
-    });
-  };
-  
-  const validateFile = (file: File): boolean => {
-    // Check file type
-    if (!file.type.startsWith('image/')) {
-      alert(`Invalid file type: ${file.name}`);
-      return false;
-    }
-    
-    // Check file size (10MB limit)
-    if (file.size > 10 * 1024 * 1024) {
-      alert(`File too large: ${file.name}`);
-      return false;
-    }
-    
-    return true;
-  };
-  
-  const handleProcessAll = async () => {
-    const pendingFiles = files.filter(f => !f.completed && !f.processing);
-    
-    if (pendingFiles.length === 0) return;
-    
-    setIsProcessing(true);
-    
-    // Process files sequentially
-    for (const file of pendingFiles) {
-      await processFile(file.id);
-    }
-    
-    setIsProcessing(false);
-  };
-  
-  const processFile = async (fileId: string) => {
-    setFiles(prev => 
-      prev.map(file => 
-        file.id === fileId ? { ...file, processing: true } : file
-      )
-    );
+  const [images, setImages] = useState<ImageItem[]>([])
+  const [isDragging, setIsDragging] = useState(false)
+  const [isProcessingAll, setIsProcessingAll] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const addFiles = useCallback((files: FileList | File[]) => {
+    const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp']
+    const arr = Array.from(files)
+    const valid = arr.filter(f => validTypes.includes(f.type) && f.size <= 10 * 1024 * 1024)
+
+    if (valid.length === 0) return
+
+    // 最多20张
+    const remaining = 20 - images.length
+    const toAdd = valid.slice(0, remaining)
+
+    const newItems: ImageItem[] = toAdd.map(file => ({
+      id: Math.random().toString(36).slice(2),
+      file,
+      originalUrl: URL.createObjectURL(file),
+      status: 'pending',
+      progress: 0,
+    }))
+
+    setImages(prev => [...prev, ...newItems])
+  }, [images.length])
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragging(false)
+    addFiles(e.dataTransfer.files)
+  }, [addFiles])
+
+  const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) addFiles(e.target.files)
+    e.target.value = ''
+  }
+
+  const processOne = async (item: ImageItem) => {
+    setImages(prev => prev.map(i => i.id === item.id ? { ...i, status: 'processing', progress: 30 } : i))
 
     try {
-      const file = files.find(f => f.id === fileId);
-      if (!file) throw new Error('File not found');
+      const formData = new FormData()
+      formData.append('file', item.file)
 
-      const formData = new FormData();
-      const response = await fetch(file.url);
-      const blob = await response.blob();
-      formData.append('file', blob);
-      formData.append('quality', selectedQuality);
-      formData.append('format', selectedFormat);
+      setImages(prev => prev.map(i => i.id === item.id ? { ...i, progress: 60 } : i))
 
-      const apiResponse = await fetch('/api/remove-background', {
-        method: 'POST',
-        body: formData,
-      });
+      const res = await fetch('/api/remove-background', { method: 'POST', body: formData })
 
-      if (!apiResponse.ok) {
-        throw new Error('Processing failed');
+      if (!res.ok) {
+        const err = await res.json()
+        throw new Error(err.error || '处理失败')
       }
 
-      const blobResult = await apiResponse.blob();
-      const resultUrl = URL.createObjectURL(blobResult);
+      const blob = await res.blob()
+      const resultUrl = URL.createObjectURL(blob)
 
-      setFiles(prev => 
-        prev.map(f => 
-          f.id === fileId 
-            ? { 
-                ...f, 
-                processing: false, 
-                completed: true,
-                url: resultUrl 
-              } 
-            : f
-        )
-      );
-
-    } catch (error) {
-      setFiles(prev => 
-        prev.map(file => 
-          file.id === fileId 
-            ? { 
-                ...file, 
-                processing: false, 
-                error: error instanceof Error ? error.message : 'Processing failed' 
-              } 
-            : file
-        )
-      );
+      setImages(prev => prev.map(i =>
+        i.id === item.id ? { ...i, status: 'done', resultUrl, progress: 100 } : i
+      ))
+    } catch (err: any) {
+      setImages(prev => prev.map(i =>
+        i.id === item.id ? { ...i, status: 'error', error: err.message, progress: 0 } : i
+      ))
     }
-  };
-  
-  const handleProcessBatch = async () => {
-    const completedFiles = files.filter(f => f.completed);
-    const pendingFiles = files.filter(f => !f.completed && !f.processing);
-    
-    if (pendingFiles.length === 0) return;
-    
-    setIsProcessing(true);
+  }
 
-    try {
-      const formData = new FormData();
-      pendingFiles.forEach(file => {
-        const response = fetch(file.url);
-        response.then(r => r.blob()).then(blob => {
-          formData.append('files', blob);
-        });
-      });
-      
-      formData.append('quality', selectedQuality);
-      formData.append('format', selectedFormat);
-
-      const apiResponse = await fetch('/api/batch-process', {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (!apiResponse.ok) {
-        throw new Error('Batch processing failed');
-      }
-
-      const result = await apiResponse.json();
-      
-      // Update file statuses based on results
-      setFiles(prev => 
-        prev.map(file => {
-          if (pendingFiles.some(pf => pf.id === file.id)) {
-            const fileResult = result.results.find((r: any) => 
-              r.inputFileName.includes(file.name.split('.')[0])
-            );
-            
-            if (fileResult?.success) {
-              return {
-                ...file,
-                processing: false,
-                completed: true
-              };
-            } else {
-              return {
-                ...file,
-                processing: false,
-                error: fileResult?.error || 'Processing failed'
-              };
-            }
-          }
-          return file;
-        })
-      );
-
-    } catch (error) {
-      setFiles(prev => 
-        prev.map(file => 
-          pendingFiles.some(pf => pf.id === file.id)
-            ? { 
-                ...file, 
-                processing: false, 
-                error: error instanceof Error ? error.message : 'Batch processing failed' 
-              } 
-            : file
-        )
-      );
-    } finally {
-      setIsProcessing(false);
+  const processAll = async () => {
+    const pending = images.filter(i => i.status === 'pending' || i.status === 'error')
+    if (pending.length === 0) return
+    setIsProcessingAll(true)
+    for (const item of pending) {
+      await processOne(item)
     }
-  };
-  
-  const removeFile = (id: string) => {
-    setFiles(prev => {
-      const fileToRemove = prev.find(f => f.id === id);
-      if (fileToRemove) {
-        URL.revokeObjectURL(fileToRemove.url);
+    setIsProcessingAll(false)
+  }
+
+  const removeImage = (id: string) => {
+    setImages(prev => {
+      const item = prev.find(i => i.id === id)
+      if (item) {
+        URL.revokeObjectURL(item.originalUrl)
+        if (item.resultUrl) URL.revokeObjectURL(item.resultUrl)
       }
-      return prev.filter(file => file.id !== id);
-    });
-  };
-  
-  const clearCompleted = () => {
-    setFiles(prev => {
-      const completedFiles = prev.filter(f => f.completed);
-      completedFiles.forEach(file => URL.revokeObjectURL(file.url));
-      return prev.filter(file => !file.completed);
-    });
-  };
-  
+      return prev.filter(i => i.id !== id)
+    })
+  }
+
+  const downloadImage = (item: ImageItem) => {
+    if (!item.resultUrl) return
+    const a = document.createElement('a')
+    a.href = item.resultUrl
+    a.download = item.file.name.replace(/\.[^.]+$/, '') + '-no-bg.png'
+    a.click()
+  }
+
+  const downloadAll = () => {
+    images.filter(i => i.status === 'done').forEach(downloadImage)
+  }
+
   const clearAll = () => {
-    setFiles(prev => {
-      prev.forEach(file => URL.revokeObjectURL(file.url));
-      return [];
-    });
-  };
+    images.forEach(i => {
+      URL.revokeObjectURL(i.originalUrl)
+      if (i.resultUrl) URL.revokeObjectURL(i.resultUrl)
+    })
+    setImages([])
+  }
 
-  const completedFiles = files.filter(file => file.completed);
-  const processingFiles = files.filter(file => file.processing);
-  const pendingFiles = files.filter(file => !file.completed && !file.processing);
+  const doneCount = images.filter(i => i.status === 'done').length
+  const pendingCount = images.filter(i => i.status === 'pending').length
+  const errorCount = images.filter(i => i.status === 'error').length
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="container mx-auto px-4 py-8">
-        <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-gray-900 mb-4">
-            AI Image Background Remover
-          </h1>
-          <p className="text-lg text-gray-600 max-w-2xl mx-auto">
-            Remove backgrounds from your images using advanced AI technology. 
-            Simply upload your images and let our AI handle the rest.
-          </p>
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+      {/* Header */}
+      <header className="bg-white shadow-sm">
+        <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center text-white text-xl">✂️</div>
+            <div>
+              <h1 className="text-xl font-bold text-gray-900">AI 背景移除</h1>
+              <p className="text-xs text-gray-500">智能一键去除图片背景</p>
+            </div>
+          </div>
+          <div className="text-sm text-gray-500">支持 JPG · PNG · WebP · 最大 10MB</div>
         </div>
-        
-        <Tabs defaultValue="upload" className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="upload">Upload</TabsTrigger>
-            <TabsTrigger value="process">Process</TabsTrigger>
-            <TabsTrigger value="results">Results</TabsTrigger>
-          </TabsList>
-          
-          <TabsContent value="upload" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Upload Images</CardTitle>
-                <CardDescription>
-                  Drag and drop your images here or click to browse. 
-                  Supported formats: JPG, PNG, WebP (Max 10MB per file)
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <FileUpload 
-                  onFileDrop={handleFileDrop}
-                  multiple
-                />
-                
-                {files.length > 0 && (
-                  <div className="mt-6">
-                    <h3 className="text-lg font-semibold mb-4">Uploaded Files ({files.length})</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {files.map((file) => (
-                        <Card key={file.id} className="relative">
-                          <CardContent className="p-4">
-                            <div className="aspect-square bg-gray-100 rounded-lg mb-2 flex items-center justify-center">
-                              <img 
-                                src={file.url} 
-                                alt={file.name} 
-                                className="max-w-full max-h-full object-contain rounded"
-                              />
-                            </div>
-                            <div className="space-y-2">
-                              <p className="text-sm font-medium truncate">{file.name}</p>
-                              <p className="text-xs text-gray-500">
-                                {formatFileSize(file.size)}
-                              </p>
-                              <div className="flex items-center justify-between">
-                                <Button
-                                  variant="destructive"
-                                  size="sm"
-                                  onClick={() => removeFile(file.id)}
-                                >
-                                  Remove
-                                </Button>
-                                {file.processing && (
-                                  <div className="w-20">
-                                    <Progress value={75} className="h-2" />
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      ))}
+      </header>
+
+      <main className="max-w-6xl mx-auto px-4 py-8 space-y-6">
+        {/* Upload Zone */}
+        <div
+          className={`border-2 border-dashed rounded-2xl p-12 text-center cursor-pointer transition-all ${
+            isDragging
+              ? 'border-blue-500 bg-blue-50 scale-[1.01]'
+              : 'border-gray-300 bg-white hover:border-blue-400 hover:bg-blue-50'
+          }`}
+          onDragOver={e => { e.preventDefault(); setIsDragging(true) }}
+          onDragLeave={() => setIsDragging(false)}
+          onDrop={handleDrop}
+          onClick={() => fileInputRef.current?.click()}
+        >
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            multiple
+            className="hidden"
+            onChange={handleFileInput}
+          />
+          <div className="text-5xl mb-4">🖼️</div>
+          <p className="text-xl font-semibold text-gray-700 mb-2">拖拽图片到此处，或点击上传</p>
+          <p className="text-sm text-gray-400">支持批量上传，最多 20 张图片，单张最大 10MB</p>
+          {images.length > 0 && (
+            <p className="mt-3 text-sm text-blue-600 font-medium">已上传 {images.length}/20 张</p>
+          )}
+        </div>
+
+        {/* Action Bar */}
+        {images.length > 0 && (
+          <div className="bg-white rounded-2xl shadow-sm p-4 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-4 text-sm">
+              <span className="text-gray-600">共 <b>{images.length}</b> 张</span>
+              {doneCount > 0 && <span className="text-green-600">✅ 完成 {doneCount}</span>}
+              {pendingCount > 0 && <span className="text-gray-500">⏳ 待处理 {pendingCount}</span>}
+              {errorCount > 0 && <span className="text-red-500">❌ 失败 {errorCount}</span>}
+            </div>
+            <div className="flex gap-2">
+              {doneCount > 0 && (
+                <button
+                  onClick={downloadAll}
+                  className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 transition"
+                >
+                  ⬇️ 全部下载
+                </button>
+              )}
+              <button
+                onClick={processAll}
+                disabled={isProcessingAll || pendingCount === 0}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isProcessingAll ? '处理中...' : `🚀 一键处理 (${pendingCount + errorCount})`}
+              </button>
+              <button
+                onClick={clearAll}
+                className="px-4 py-2 bg-gray-100 text-gray-600 rounded-lg text-sm font-medium hover:bg-gray-200 transition"
+              >
+                🗑️ 清空
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Image Grid */}
+        {images.length > 0 && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {images.map(item => (
+              <div key={item.id} className="bg-white rounded-2xl shadow-sm overflow-hidden">
+                {/* Image Preview */}
+                <div className="relative aspect-square bg-gray-100">
+                  {/* Checkerboard for transparency */}
+                  <div
+                    className="absolute inset-0"
+                    style={{
+                      backgroundImage: 'linear-gradient(45deg, #e5e7eb 25%, transparent 25%), linear-gradient(-45deg, #e5e7eb 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #e5e7eb 75%), linear-gradient(-45deg, transparent 75%, #e5e7eb 75%)',
+                      backgroundSize: '16px 16px',
+                      backgroundPosition: '0 0, 0 8px, 8px -8px, -8px 0px',
+                    }}
+                  />
+                  <img
+                    src={item.resultUrl || item.originalUrl}
+                    alt={item.file.name}
+                    className="absolute inset-0 w-full h-full object-contain"
+                  />
+
+                  {/* Status overlay */}
+                  {item.status === 'processing' && (
+                    <div className="absolute inset-0 bg-black/40 flex flex-col items-center justify-center">
+                      <div className="w-10 h-10 border-4 border-white border-t-transparent rounded-full animate-spin mb-2" />
+                      <span className="text-white text-sm font-medium">处理中 {item.progress}%</span>
                     </div>
+                  )}
+                  {item.status === 'done' && (
+                    <div className="absolute top-2 right-2 bg-green-500 text-white text-xs px-2 py-1 rounded-full font-medium">
+                      ✓ 完成
+                    </div>
+                  )}
+                  {item.status === 'error' && (
+                    <div className="absolute inset-0 bg-red-500/20 flex items-center justify-center">
+                      <div className="bg-white rounded-lg p-3 text-center mx-2">
+                        <p className="text-red-600 text-xs font-medium">❌ {item.error}</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Remove button */}
+                  <button
+                    onClick={() => removeImage(item.id)}
+                    className="absolute top-2 left-2 w-6 h-6 bg-black/50 text-white rounded-full text-xs hover:bg-black/70 transition flex items-center justify-center"
+                  >
+                    ×
+                  </button>
+                </div>
+
+                {/* Progress bar */}
+                {item.status === 'processing' && (
+                  <div className="h-1 bg-gray-100">
+                    <div
+                      className="h-full bg-blue-500 transition-all duration-300"
+                      style={{ width: `${item.progress}%` }}
+                    />
                   </div>
                 )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-          
-          <TabsContent value="process" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Processing Options</CardTitle>
-                <CardDescription>
-                  Configure how your images will be processed
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Quality
-                    </label>
-                    <select 
-                      value={selectedQuality}
-                      onChange={(e) => setSelectedQuality(e.target.value as any)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    >
-                      <option value="low">Low (Fast)</option>
-                      <option value="medium">Medium (Balanced)</option>
-                      <option value="high">High (Quality)</option>
-                    </select>
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Output Format
-                    </label>
-                    <select 
-                      value={selectedFormat}
-                      onChange={(e) => setSelectedFormat(e.target.value as any)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    >
-                      <option value="png">PNG (Transparent)</option>
-                      <option value="jpg">JPG</option>
-                      <option value="webp">WebP</option>
-                    </select>
+
+                {/* Info & Actions */}
+                <div className="p-3 space-y-2">
+                  <p className="text-xs text-gray-600 truncate font-medium" title={item.file.name}>
+                    {item.file.name}
+                  </p>
+                  <p className="text-xs text-gray-400">{formatSize(item.file.size)}</p>
+
+                  <div className="flex gap-2">
+                    {item.status === 'pending' && (
+                      <button
+                        onClick={() => processOne(item)}
+                        className="flex-1 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-medium hover:bg-blue-700 transition"
+                      >
+                        处理
+                      </button>
+                    )}
+                    {item.status === 'error' && (
+                      <button
+                        onClick={() => processOne(item)}
+                        className="flex-1 py-1.5 bg-orange-500 text-white rounded-lg text-xs font-medium hover:bg-orange-600 transition"
+                      >
+                        重试
+                      </button>
+                    )}
+                    {item.status === 'done' && (
+                      <button
+                        onClick={() => downloadImage(item)}
+                        className="flex-1 py-1.5 bg-green-600 text-white rounded-lg text-xs font-medium hover:bg-green-700 transition"
+                      >
+                        ⬇️ 下载
+                      </button>
+                    )}
                   </div>
                 </div>
-                
-                <ProcessingControls
-                  files={files}
-                  isProcessing={isProcessing}
-                  onProcessAll={handleProcessAll}
-                  onProcessBatch={handleProcessBatch}
-                  onClearCompleted={clearCompleted}
-                  onClearAll={clearAll}
-                />
-              </CardContent>
-            </Card>
-          </TabsContent>
-          
-          <TabsContent value="results" className="space-y-6">
-            <ImageGrid
-              files={files}
-              onRemove={removeFile}
-            />
-          </TabsContent>
-        </Tabs>
-      </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Empty state */}
+        {images.length === 0 && (
+          <div className="text-center py-8 text-gray-400">
+            <p className="text-lg">上传图片开始使用 👆</p>
+            <p className="text-sm mt-1">支持电商产品图、人像证件照、设计素材等</p>
+          </div>
+        )}
+      </main>
+
+      {/* Footer */}
+      <footer className="text-center py-6 text-xs text-gray-400">
+        <p>图片在本地处理，不会上传到服务器 · 保护您的隐私</p>
+      </footer>
     </div>
-  );
+  )
 }
