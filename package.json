@@ -1,0 +1,46 @@
+{
+  "name": "image-background-remover",
+  "version": "1.0.0",
+  "description": "AI-powered image background removal tool",
+  "main": "index.js",
+  "bin": {
+    "image-background-remover": "index.js"
+  },
+  "scripts": {
+    "start": "node index.js",
+    "test": "node test.js"
+  },
+  "keywords": [
+    "image",
+    "background",
+    "removal",
+    "ai",
+    "machine-learning",
+    "computer-vision",
+    "photoshop",
+    "transparent",
+    "png"
+  ],
+  "author": "zfkk667",
+  "license": "MIT",
+  "dependencies": {
+    "sharp": "^0.33.0",
+    "canvas": "^2.11.2",
+    "node-fetch": "^3.3.2",
+    "commander": "^11.1.0"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/zfkk667/image-background-remover.git"
+  },
+  "bugs": {
+    "url": "https://github.com/zfkk667/image-background-remover/issues"
+  },
+  "homepage": "https://github.com/zfkk667/image-background-remover#readme"
+}
