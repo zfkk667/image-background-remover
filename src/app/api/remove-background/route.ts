@@ -14,7 +14,7 @@ async function removeViaRemoveBg(buffer: Buffer): Promise<Buffer> {
   if (!apiKey) throw new Error('NO_API_KEY')
 
   const formData = new FormData()
-  formData.append('image_file', new Blob([buffer]), 'image.png')
+  formData.append('image_file', new Blob([new Uint8Array(buffer)]), 'image.png')
   formData.append('size', 'auto')
 
   const res = await fetch('https://api.remove.bg/v1.0/removebg', {
@@ -113,7 +113,7 @@ export async function POST(req: NextRequest) {
     const processingTime = Date.now() - startTime
     const meta = await sharp(resultBuffer).metadata()
 
-    return new NextResponse(resultBuffer, {
+    return new NextResponse(new Uint8Array(resultBuffer), {
       headers: {
         'Content-Type': 'image/png',
         'Content-Disposition': `attachment; filename="removed-bg.png"`,
