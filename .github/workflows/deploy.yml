@@ -22,12 +22,17 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Install Cloudflare adapter
+        run: npm install -D @cloudflare/next-on-pages
+
       - name: Build
-        run: npm run build
+        run: npx @cloudflare/next-on-pages
         env:
           NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
           NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET }}
           NEXTAUTH_URL: ${{ secrets.NEXTAUTH_URL }}
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
           REMOVEBG_API_KEY: ${{ secrets.REMOVEBG_API_KEY }}
 
       - name: Deploy to Cloudflare Pages
@@ -36,5 +41,5 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           projectName: image-background-remover
-          directory: .next
+          directory: .vercel/output/static
           gitHubToken: ${{ secrets.GITHUB_TOKEN }}
