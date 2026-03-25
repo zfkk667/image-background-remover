@@ -20,12 +20,9 @@ jobs:
           cache-dependency-path: package-lock.json
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --legacy-peer-deps
 
-      - name: Install Cloudflare adapter
-        run: npm install -D @cloudflare/next-on-pages
-
-      - name: Build
+      - name: Build for Cloudflare
         run: npx @cloudflare/next-on-pages
         env:
           NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}

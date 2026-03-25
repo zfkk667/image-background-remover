@@ -1,18 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import sharp from 'sharp'
-import { execFile } from 'child_process'
-import { promisify } from 'util'
-import { writeFile, readFile, unlink, mkdir } from 'fs/promises'
-import { join } from 'path'
-import { tmpdir } from 'os'
 
-const execFileAsync = promisify(execFile)
+export const runtime = 'edge'
 
-// ── 方案 A：remove.bg API ──────────────────────────────────────────────────
-async function removeViaRemoveBg(buffer: Buffer): Promise<Buffer> {
-  const apiKey = process.env.REMOVE_BG_API_KEY
-  if (!apiKey) throw new Error('NO_API_KEY')
-
+// Edge Runtime 兼容的背景移除 API（仅使用 remove.bg）
+async function removeViaRemoveBg(buffer: ArrayBuffer, apiKey: string): Promise<ArrayBuffer> {
   const formData = new FormData()
   formData.append('image_file', new Blob([new Uint8Array(buffer)]), 'image.png')
   formData.append('size', 'auto')
@@ -28,51 +19,16 @@ async function removeViaRemoveBg(buffer: Buffer): Promise<Buffer> {
     throw new Error(`remove.bg error ${res.status}: ${err}`)
   }
 
-  return Buffer.from(await res.arrayBuffer())
+  return res.arrayBuffer()
 }
 
-// ── 方案 B：本地 rembg（Python）────────────────────────────────────────────
-async function removeViaRembg(buffer: Buffer): Promise<Buffer> {
-  const dir = join(tmpdir(), `rembg-${Date.now()}`)
-  await mkdir(dir, { recursive: true })
-
-  const inputPath = join(dir, 'input.png')
-  const outputPath = join(dir, 'output.png')
-
-  try {
-    // 先用 sharp 统一转为 PNG
-    const png = await sharp(buffer).png().toBuffer()
-    await writeFile(inputPath, png)
-
-    // 调用 rembg CLI
-    await execFileAsync('python3', [
-      '-c',
-      `
-from rembg import remove
-from PIL import Image
-import io
-
-with open(${JSON.stringify(inputPath)}, 'rb') as f:
-    data = f.read()
-
-result = remove(data)
-
-with open(${JSON.stringify(outputPath)}, 'wb') as f:
-    f.write(result)
-`,
-    ], { timeout: 30000 })
-
-    return await readFile(outputPath)
-  } finally {
-    // 清理临时文件
-    await unlink(inputPath).catch(() => {})
-    await unlink(outputPath).catch(() => {})
-  }
-}
-
-// ── 主处理函数 ─────────────────────────────────────────────────────────────
 export async function POST(req: NextRequest) {
   try {
+    const apiKey = process.env.REMOVEBG_API_KEY
+    if (!apiKey) {
+      return NextResponse.json({ error: '服务未配置：缺少 API Key' }, { status: 500 })
+    }
+
     const formData = await req.formData()
     const file = formData.get('file') as File | null
 
@@ -92,35 +48,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: '文件大小超过 10MB 限制' }, { status: 400 })
     }
 
-    const buffer = Buffer.from(await file.arrayBuffer())
+    const buffer = await file.arrayBuffer()
     const startTime = Date.now()
 
-    let resultBuffer: Buffer
-    let engine: string
-
-    // 优先 remove.bg，降级到 rembg
-    try {
-      resultBuffer = await removeViaRemoveBg(buffer)
-      engine = 'remove.bg'
-    } catch (err: any) {
-      if (err.message !== 'NO_API_KEY') {
-        console.warn('remove.bg failed, falling back to rembg:', err.message)
-      }
-      resultBuffer = await removeViaRembg(buffer)
-      engine = 'rembg'
-    }
+    const resultBuffer = await removeViaRemoveBg(buffer, apiKey)
 
     const processingTime = Date.now() - startTime
-    const meta = await sharp(resultBuffer).metadata()
 
     return new NextResponse(new Uint8Array(resultBuffer), {
       headers: {
         'Content-Type': 'image/png',
         'Content-Disposition': `attachment; filename="removed-bg.png"`,
-        'X-Engine': engine,
+        'X-Engine': 'remove.bg',
         'X-Processing-Time': String(processingTime),
-        'X-Image-Width': String(meta.width ?? 0),
-        'X-Image-Height': String(meta.height ?? 0),
       },
     })
   } catch (err: any) {
