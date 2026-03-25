@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useCallback, useRef } from 'react'
+import AuthButton from '@/components/AuthButton'
 
 interface ImageItem {
   id: string
