@@ -1,9 +1,12 @@
+'use client'
+
 /**
  * Pricing Page - Credits + Monthly Subscription
  * Credits: Starter, Popular, Pro Pack
  * Subscriptions: Basic, Pro
  */
 
+import { useEffect, useRef } from 'react'
 import Link from 'next/link'
 
 export const metadata = {
@@ -11,7 +14,185 @@ export const metadata = {
   description: 'Flexible pricing: buy credits or subscribe monthly.',
 }
 
+// Load PayPal SDK
+const loadPayPalScript = (clientId: string): Promise<void> => {
+  return new Promise((resolve, reject) => {
+    if (document.querySelector('script[src*="paypal.com"]')) {
+      resolve()
+      return
+    }
+    const script = document.createElement('script')
+    script.src = `https://www.paypal.com/sdk/js?client-id=${clientId}&currency=USD`
+    script.async = true
+    script.onload = () => resolve()
+    script.onerror = () => reject(new Error('Failed to load PayPal SDK'))
+    document.head.appendChild(script)
+  })
+}
+
+// Create order handler
+const createOrder = async (plan: string): Promise<string> => {
+  const response = await fetch('/api/paypal/create-order', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ plan }),
+  })
+  const data = await response.json()
+  if (!response.ok) throw new Error(data.error)
+  return data.orderID
+}
+
+// Create subscription handler
+const createSubscription = async (plan: string): Promise<string> => {
+  const response = await fetch('/api/paypal/create-subscription', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ plan }),
+  })
+  const data = await response.json()
+  if (!response.ok) throw new Error(data.error)
+  // Redirect to PayPal approval URL
+  if (data.approvalUrl) {
+    window.location.href = data.approvalUrl
+  }
+  return data.subscriptionId
+}
+
 export default function PricingPage() {
+  const basicContainerRef = useRef<HTMLDivElement>(null)
+  const proContainerRef = useRef<HTMLDivElement>(null)
+  const starterContainerRef = useRef<HTMLDivElement>(null)
+  const popularContainerRef = useRef<HTMLDivElement>(null)
+  const proPackContainerRef = useRef<HTMLDivElement>(null)
+  const paypalLoadedRef = useRef(false)
+
+  useEffect(() => {
+    // Get PayPal client ID from environment
+    const clientId = (window as any).NEXT_PUBLIC_PAYPAL_CLIENT_ID || 'YOUR_PAYPAL_CLIENT_ID'
+
+    loadPayPalScript(clientId)
+      .then(() => {
+        if (typeof window !== 'undefined' && (window as any).paypal) {
+          const paypal = (window as any).paypal
+
+          // Render subscription buttons (Basic & Pro)
+          if (basicContainerRef.current && !basicContainerRef.current.querySelector('.paypal-button')) {
+            paypal.Buttons({
+              style: { layout: 'vertical', color: 'blue', shape: 'rect', label: 'subscribe' },
+              createSubscription: (data: any, actions: any) => {
+                return actions.subscription.create({
+                  plan_id: 'PAYPAL_BASIC_MONTHLY', // Replace with actual PayPal plan ID
+                })
+              },
+              onApprove: (data: any, actions: any) => {
+                console.log('Basic subscription approved:', data)
+                window.location.href = '/dashboard?payment=success'
+              },
+              onError: (err: any) => {
+                console.error('PayPal Basic error:', err)
+                // Fallback: use our API
+                createSubscription('basic').catch(console.error)
+              },
+            }).render(basicContainerRef.current)
+          }
+
+          if (proContainerRef.current && !proContainerRef.current.querySelector('.paypal-button')) {
+            paypal.Buttons({
+              style: { layout: 'vertical', color: 'black', shape: 'rect', label: 'subscribe' },
+              createSubscription: (data: any, actions: any) => {
+                return actions.subscription.create({
+                  plan_id: 'PAYPAL_PRO_MONTHLY', // Replace with actual PayPal plan ID
+                })
+              },
+              onApprove: (data: any, actions: any) => {
+                console.log('Pro subscription approved:', data)
+                window.location.href = '/dashboard?payment=success'
+              },
+              onError: (err: any) => {
+                console.error('PayPal Pro error:', err)
+                createSubscription('pro').catch(console.error)
+              },
+            }).render(proContainerRef.current)
+          }
+
+          // Render one-time purchase buttons (Credits)
+          if (starterContainerRef.current && !starterContainerRef.current.querySelector('.paypal-button')) {
+            paypal.Buttons({
+              style: { layout: 'vertical', color: 'gold', shape: 'rect' },
+              createOrder: (data: any, actions: any) => {
+                return actions.order.create({
+                  purchase_units: [{
+                    description: 'Starter - 10 Credits',
+                    amount: { value: '4.99' },
+                    custom_id: JSON.stringify({ plan: 'starter', credits: 10 }),
+                  }],
+                })
+              },
+              onApprove: (data: any, actions: any) => {
+                console.log('Starter order approved:', data)
+                window.location.href = '/dashboard?payment=success'
+              },
+              onError: (err: any) => {
+                console.error('PayPal Starter error:', err)
+                createOrder('starter').catch(console.error)
+              },
+            }).render(starterContainerRef.current)
+          }
+
+          if (popularContainerRef.current && !popularContainerRef.current.querySelector('.paypal-button')) {
+            paypal.Buttons({
+              style: { layout: 'vertical', color: 'gold', shape: 'rect' },
+              createOrder: (data: any, actions: any) => {
+                return actions.order.create({
+                  purchase_units: [{
+                    description: 'Popular - 30 Credits',
+                    amount: { value: '12.99' },
+                    custom_id: JSON.stringify({ plan: 'popular', credits: 30 }),
+                  }],
+                })
+              },
+              onApprove: (data: any, actions: any) => {
+                console.log('Popular order approved:', data)
+                window.location.href = '/dashboard?payment=success'
+              },
+              onError: (err: any) => {
+                console.error('PayPal Popular error:', err)
+                createOrder('popular').catch(console.error)
+              },
+            }).render(popularContainerRef.current)
+          }
+
+          if (proPackContainerRef.current && !proPackContainerRef.current.querySelector('.paypal-button')) {
+            paypal.Buttons({
+              style: { layout: 'vertical', color: 'gold', shape: 'rect' },
+              createOrder: (data: any, actions: any) => {
+                return actions.order.create({
+                  purchase_units: [{
+                    description: 'Pro Pack - 80 Credits',
+                    amount: { value: '29.99' },
+                    custom_id: JSON.stringify({ plan: 'pro_pack', credits: 80 }),
+                  }],
+                })
+              },
+              onApprove: (data: any, actions: any) => {
+                console.log('Pro Pack order approved:', data)
+                window.location.href = '/dashboard?payment=success'
+              },
+              onError: (err: any) => {
+                console.error('PayPal Pro Pack error:', err)
+                createOrder('pro_pack').catch(console.error)
+              },
+            }).render(proPackContainerRef.current)
+          }
+
+          paypalLoadedRef.current = true
+        }
+      })
+      .catch((err) => {
+        console.error('Failed to load PayPal SDK:', err)
+      })
+  }, [])
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
@@ -70,7 +251,7 @@ export default function PricingPage() {
                 <p className="text-sm text-gray-500 mt-2">$0.40 per image</p>
               </div>
               
-              <ul className="space-y-3 mb-8 text-sm text-gray-600">
+              <ul className="space-y-3 mb-6 text-sm text-gray-600">
                 <li className="flex items-center gap-2">
                   <span className="text-green-500">✓</span> 25 image processings/month
                 </li>
@@ -88,9 +269,9 @@ export default function PricingPage() {
                 </li>
               </ul>
               
-              <button className="w-full py-3 border-2 border-blue-500 text-blue-600 rounded-lg font-semibold hover:bg-blue-50 transition">
-                Subscribe Basic
-              </button>
+              <div ref={basicContainerRef} className="paypal-button-container">
+                {/* PayPal button will be rendered here */}
+              </div>
             </div>
 
             {/* Pro - Monthly */}
@@ -116,7 +297,7 @@ export default function PricingPage() {
                 <p className="text-sm text-green-600 mt-2 font-medium">Save 60% vs Basic</p>
               </div>
               
-              <ul className="space-y-3 mb-8 text-sm text-gray-600">
+              <ul className="space-y-3 mb-6 text-sm text-gray-600">
                 <li className="flex items-center gap-2">
                   <span className="text-green-500">✓</span> 60 image processings/month
                 </li>
@@ -134,9 +315,9 @@ export default function PricingPage() {
                 </li>
               </ul>
               
-              <button className="w-full py-3 bg-purple-600 text-white rounded-lg font-bold hover:bg-purple-700 transition">
-                Subscribe Pro
-              </button>
+              <div ref={proContainerRef} className="paypal-button-container">
+                {/* PayPal button will be rendered here */}
+              </div>
             </div>
           </div>
         </div>
@@ -174,7 +355,7 @@ export default function PricingPage() {
                 <p className="text-sm text-gray-500 mt-2">$0.50 per image</p>
               </div>
               
-              <ul className="space-y-3 mb-8 text-sm text-gray-600">
+              <ul className="space-y-3 mb-6 text-sm text-gray-600">
                 <li className="flex items-center gap-2">
                   <span className="text-green-500">✓</span> 10 image processings
                 </li>
@@ -192,9 +373,9 @@ export default function PricingPage() {
                 </li>
               </ul>
               
-              <button className="w-full py-3 border-2 border-gray-300 rounded-lg font-semibold hover:border-blue-500 hover:text-blue-600 transition">
-                Buy Starter
-              </button>
+              <div ref={starterContainerRef} className="paypal-button-container">
+                {/* PayPal button will be rendered here */}
+              </div>
             </div>
 
             {/* Popular - 30 Credits */}
@@ -220,7 +401,7 @@ export default function PricingPage() {
                 <p className="text-sm text-green-600 mt-2 font-medium">Save 13% vs Starter</p>
               </div>
               
-              <ul className="space-y-3 mb-8 text-sm text-gray-600">
+              <ul className="space-y-3 mb-6 text-sm text-gray-600">
                 <li className="flex items-center gap-2">
                   <span className="text-green-500">✓</span> 30 image processings
                 </li>
@@ -238,9 +419,9 @@ export default function PricingPage() {
                 </li>
               </ul>
               
-              <button className="w-full py-3 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 transition">
-                Buy Popular
-              </button>
+              <div ref={popularContainerRef} className="paypal-button-container">
+                {/* PayPal button will be rendered here */}
+              </div>
             </div>
 
             {/* Pro Pack - 80 Credits */}
@@ -262,7 +443,7 @@ export default function PricingPage() {
                 <p className="text-sm text-purple-600 mt-2 font-medium">Save 25% vs Starter</p>
               </div>
               
-              <ul className="space-y-3 mb-8 text-sm text-gray-600">
+              <ul className="space-y-3 mb-6 text-sm text-gray-600">
                 <li className="flex items-center gap-2">
                   <span className="text-green-500">✓</span> 80 image processings
                 </li>
@@ -280,9 +461,9 @@ export default function PricingPage() {
                 </li>
               </ul>
               
-              <button className="w-full py-3 border-2 border-purple-500 text-purple-600 rounded-lg font-semibold hover:bg-purple-50 transition">
-                Buy Pro Pack
-              </button>
+              <div ref={proPackContainerRef} className="paypal-button-container">
+                {/* PayPal button will be rendered here */}
+              </div>
             </div>
           </div>
         </div>
@@ -298,8 +479,8 @@ export default function PricingPage() {
               <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
                 <span className="text-2xl">1️⃣</span>
               </div>
-              <h3 className="font-bold mb-2">Buy Credits</h3>
-              <p className="text-gray-600 text-sm">Choose a package that fits your needs. Pay once, use forever.</p>
+              <h3 className="font-bold mb-2">Buy Credits or Subscribe</h3>
+              <p className="text-gray-600 text-sm">Choose a package that fits your needs. Pay once for credits, or subscribe monthly for more savings.</p>
             </div>
             
             <div className="text-center">
@@ -384,6 +565,16 @@ export default function PricingPage() {
               </summary>
               <p className="p-4 text-gray-600 border-t border-gray-100">
                 Due to the nature of digital products, we cannot offer refunds once credits have been purchased. Please review your plan before purchasing.
+              </p>
+            </details>
+
+            <details className="group border border-gray-200 rounded-lg bg-white">
+              <summary className="flex items-center justify-between p-4 cursor-pointer font-semibold text-gray-900">
+                How do I cancel my subscription?
+                <span className="ml-2 group-open:rotate-180 transition-transform">▼</span>
+              </summary>
+              <p className="p-4 text-gray-600 border-t border-gray-100">
+                You can cancel your subscription anytime from your Dashboard. Your remaining credits will still be usable until the end of your billing period. We don't provide refunds for partially unused periods.
               </p>
             </details>
           </div>
