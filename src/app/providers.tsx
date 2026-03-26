@@ -9,9 +9,17 @@ interface User {
   picture?: string
 }
 
+interface QuotaInfo {
+  total: number
+  free_remaining: number | null
+  credits_purchased: number | null
+  subscription_tier: string | null
+}
+
 interface Session {
   authenticated: boolean
   user?: User
+  quota?: QuotaInfo
 }
 
 interface SessionContextType {

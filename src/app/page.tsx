@@ -144,7 +144,11 @@ export default function Home() {
               <p className="text-xs text-gray-500">智能一键去除图片背景</p>
             </div>
           </div>
-          <div className="text-sm text-gray-500">支持 JPG · PNG · WebP · 最大 10MB</div>
+          <div className="flex items-center gap-4">
+            <a href="/pricing" className="text-sm text-blue-600 hover:text-blue-700 font-medium">💰 定价</a>
+            <div className="text-sm text-gray-500">支持 JPG · PNG · WebP · 最大 10MB</div>
+            <AuthButton />
+          </div>
         </div>
       </header>
 

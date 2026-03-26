@@ -1,39 +1,54 @@
 'use client'
 
 import { useSession } from '../app/providers'
+import Link from 'next/link'
 
 export default function AuthButton() {
-  const { session, loading, signIn, signOut } = useSession()
+  const { session, loading } = useSession()
 
   if (loading) {
-    return <div className="text-sm">加载中...</div>
+    return <div className="text-sm">Loading...</div>
   }
 
   if (session?.authenticated && session.user) {
+    const totalQuota = session.quota?.total ?? 0
+    
     return (
       <div className="flex items-center gap-4">
-        {session.user.picture && (
-          <img
-            src={session.user.picture}
-            alt={session.user.name || 'User'}
-            className="w-8 h-8 rounded-full"
-          />
+        {totalQuota > 0 ? (
+          <Link 
+            href="/dashboard"
+            className="flex items-center gap-2 px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm font-medium hover:bg-blue-200 transition"
+          >
+            <span>🎫</span>
+            <span>{totalQuota} credits</span>
+          </Link>
+        ) : (
+          <Link 
+            href="/pricing"
+            className="flex items-center gap-2 px-3 py-1 bg-red-100 text-red-700 rounded-full text-sm font-medium hover:bg-red-200 transition"
+          >
+            <span>⚠️</span>
+            <span>No credits</span>
+          </Link>
         )}
-        <p className="text-sm">{session.user.name || session.user.email}</p>
-        <button
-          onClick={signOut}
-          className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 transition"
-        >
-          登出
-        </button>
+        <Link href="/dashboard">
+          {session.user.picture && (
+            <img
+              src={session.user.picture}
+              alt={session.user.name || 'User'}
+              className="w-8 h-8 rounded-full"
+            />
+          )}
+        </Link>
       </div>
     )
   }
 
   return (
-    <button
-      onClick={signIn}
-      className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition flex items-center gap-2"
+    <Link
+      href="/login"
+      className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition flex items-center gap-2"
     >
       <svg className="w-5 h-5" viewBox="0 0 24 24">
         <path
@@ -53,7 +68,7 @@ export default function AuthButton() {
           d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
         />
       </svg>
-      使用 Google 登录
-    </button>
+      Sign In
+    </Link>
   )
 }
