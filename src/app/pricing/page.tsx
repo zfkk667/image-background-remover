@@ -4,194 +4,91 @@
  * Pricing Page - Credits + Monthly Subscription
  * Credits: Starter, Popular, Pro Pack
  * Subscriptions: Basic, Pro
+ * Uses PayPal Checkout redirect flow
  */
 
-import { useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 
-export const metadata = {
-  title: 'Pricing - AI Background Remover',
-  description: 'Flexible pricing: buy credits or subscribe monthly.',
+// Get user info from session
+const getSession = async () => {
+  try {
+    const res = await fetch('/api/auth/session')
+    const data = await res.json()
+    return data.authenticated ? data.user : null
+  } catch {
+    return null
+  }
 }
 
-// Load PayPal SDK
-const loadPayPalScript = (clientId: string): Promise<void> => {
-  return new Promise((resolve, reject) => {
-    if (document.querySelector('script[src*="paypal.com"]')) {
-      resolve()
+// Create order via API and redirect to PayPal
+const handleBuyCredits = async (plan: 'starter' | 'popular' | 'pro_pack', setLoading: (v: string) => void) => {
+  setLoading(plan)
+  try {
+    // Get user from session first
+    const user = await getSession()
+    if (!user) {
+      alert('Please sign in first to purchase credits.')
+      window.location.href = '/login'
       return
     }
-    const script = document.createElement('script')
-    script.src = `https://www.paypal.com/sdk/js?client-id=${clientId}&currency=USD`
-    script.async = true
-    script.onload = () => resolve()
-    script.onerror = () => reject(new Error('Failed to load PayPal SDK'))
-    document.head.appendChild(script)
-  })
-}
-
-// Create order handler
-const createOrder = async (plan: string): Promise<string> => {
-  const response = await fetch('/api/paypal/create-order', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ plan }),
-  })
-  const data = await response.json()
-  if (!response.ok) throw new Error(data.error)
-  return data.orderID
-}
-
-// Create subscription handler
-const createSubscription = async (plan: string): Promise<string> => {
-  const response = await fetch('/api/paypal/create-subscription', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ plan }),
-  })
-  const data = await response.json()
-  if (!response.ok) throw new Error(data.error)
-  // Redirect to PayPal approval URL
-  if (data.approvalUrl) {
-    window.location.href = data.approvalUrl
+    
+    const response = await fetch('/api/paypal/create-order', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ plan, userId: user.sub }),
+    })
+    const data = await response.json()
+    if (!response.ok) throw new Error(data.error || 'Failed to create order')
+    
+    // Redirect to PayPal approval URL
+    if (data.approvalUrl) {
+      window.location.href = data.approvalUrl
+    } else {
+      alert('Unable to initiate PayPal checkout. Please try again.')
+    }
+  } catch (error) {
+    console.error('Order creation error:', error)
+    alert('Failed to create order. Please try again.')
   }
-  return data.subscriptionId
+  setLoading('')
+}
+
+// Create subscription via API and redirect to PayPal
+const handleSubscribe = async (plan: 'basic' | 'pro', setLoading: (v: string) => void) => {
+  setLoading(plan)
+  try {
+    // Get user from session first
+    const user = await getSession()
+    if (!user) {
+      alert('Please sign in first to subscribe.')
+      window.location.href = '/login'
+      return
+    }
+    
+    const response = await fetch('/api/paypal/create-subscription', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ plan, userId: user.sub }),
+    })
+    const data = await response.json()
+    if (!response.ok) throw new Error(data.error || 'Failed to create subscription')
+    
+    // Redirect to PayPal approval URL
+    if (data.approvalUrl) {
+      window.location.href = data.approvalUrl
+    } else {
+      alert('Unable to initiate PayPal checkout. Please try again.')
+    }
+  } catch (error) {
+    console.error('Subscription creation error:', error)
+    alert('Failed to create subscription. Please try again.')
+  }
+  setLoading('')
 }
 
 export default function PricingPage() {
-  const basicContainerRef = useRef<HTMLDivElement>(null)
-  const proContainerRef = useRef<HTMLDivElement>(null)
-  const starterContainerRef = useRef<HTMLDivElement>(null)
-  const popularContainerRef = useRef<HTMLDivElement>(null)
-  const proPackContainerRef = useRef<HTMLDivElement>(null)
-  const paypalLoadedRef = useRef(false)
-
-  useEffect(() => {
-    // Get PayPal client ID from environment
-    const clientId = (window as any).NEXT_PUBLIC_PAYPAL_CLIENT_ID || 'YOUR_PAYPAL_CLIENT_ID'
-
-    loadPayPalScript(clientId)
-      .then(() => {
-        if (typeof window !== 'undefined' && (window as any).paypal) {
-          const paypal = (window as any).paypal
-
-          // Render subscription buttons (Basic & Pro)
-          if (basicContainerRef.current && !basicContainerRef.current.querySelector('.paypal-button')) {
-            paypal.Buttons({
-              style: { layout: 'vertical', color: 'blue', shape: 'rect', label: 'subscribe' },
-              createSubscription: (data: any, actions: any) => {
-                return actions.subscription.create({
-                  plan_id: 'PAYPAL_BASIC_MONTHLY', // Replace with actual PayPal plan ID
-                })
-              },
-              onApprove: (data: any, actions: any) => {
-                console.log('Basic subscription approved:', data)
-                window.location.href = '/dashboard?payment=success'
-              },
-              onError: (err: any) => {
-                console.error('PayPal Basic error:', err)
-                // Fallback: use our API
-                createSubscription('basic').catch(console.error)
-              },
-            }).render(basicContainerRef.current)
-          }
-
-          if (proContainerRef.current && !proContainerRef.current.querySelector('.paypal-button')) {
-            paypal.Buttons({
-              style: { layout: 'vertical', color: 'black', shape: 'rect', label: 'subscribe' },
-              createSubscription: (data: any, actions: any) => {
-                return actions.subscription.create({
-                  plan_id: 'PAYPAL_PRO_MONTHLY', // Replace with actual PayPal plan ID
-                })
-              },
-              onApprove: (data: any, actions: any) => {
-                console.log('Pro subscription approved:', data)
-                window.location.href = '/dashboard?payment=success'
-              },
-              onError: (err: any) => {
-                console.error('PayPal Pro error:', err)
-                createSubscription('pro').catch(console.error)
-              },
-            }).render(proContainerRef.current)
-          }
-
-          // Render one-time purchase buttons (Credits)
-          if (starterContainerRef.current && !starterContainerRef.current.querySelector('.paypal-button')) {
-            paypal.Buttons({
-              style: { layout: 'vertical', color: 'gold', shape: 'rect' },
-              createOrder: (data: any, actions: any) => {
-                return actions.order.create({
-                  purchase_units: [{
-                    description: 'Starter - 10 Credits',
-                    amount: { value: '4.99' },
-                    custom_id: JSON.stringify({ plan: 'starter', credits: 10 }),
-                  }],
-                })
-              },
-              onApprove: (data: any, actions: any) => {
-                console.log('Starter order approved:', data)
-                window.location.href = '/dashboard?payment=success'
-              },
-              onError: (err: any) => {
-                console.error('PayPal Starter error:', err)
-                createOrder('starter').catch(console.error)
-              },
-            }).render(starterContainerRef.current)
-          }
-
-          if (popularContainerRef.current && !popularContainerRef.current.querySelector('.paypal-button')) {
-            paypal.Buttons({
-              style: { layout: 'vertical', color: 'gold', shape: 'rect' },
-              createOrder: (data: any, actions: any) => {
-                return actions.order.create({
-                  purchase_units: [{
-                    description: 'Popular - 30 Credits',
-                    amount: { value: '12.99' },
-                    custom_id: JSON.stringify({ plan: 'popular', credits: 30 }),
-                  }],
-                })
-              },
-              onApprove: (data: any, actions: any) => {
-                console.log('Popular order approved:', data)
-                window.location.href = '/dashboard?payment=success'
-              },
-              onError: (err: any) => {
-                console.error('PayPal Popular error:', err)
-                createOrder('popular').catch(console.error)
-              },
-            }).render(popularContainerRef.current)
-          }
-
-          if (proPackContainerRef.current && !proPackContainerRef.current.querySelector('.paypal-button')) {
-            paypal.Buttons({
-              style: { layout: 'vertical', color: 'gold', shape: 'rect' },
-              createOrder: (data: any, actions: any) => {
-                return actions.order.create({
-                  purchase_units: [{
-                    description: 'Pro Pack - 80 Credits',
-                    amount: { value: '29.99' },
-                    custom_id: JSON.stringify({ plan: 'pro_pack', credits: 80 }),
-                  }],
-                })
-              },
-              onApprove: (data: any, actions: any) => {
-                console.log('Pro Pack order approved:', data)
-                window.location.href = '/dashboard?payment=success'
-              },
-              onError: (err: any) => {
-                console.error('PayPal Pro Pack error:', err)
-                createOrder('pro_pack').catch(console.error)
-              },
-            }).render(proPackContainerRef.current)
-          }
-
-          paypalLoadedRef.current = true
-        }
-      })
-      .catch((err) => {
-        console.error('Failed to load PayPal SDK:', err)
-      })
-  }, [])
+  const [loading, setLoading] = useState<string>('')
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -269,9 +166,13 @@ export default function PricingPage() {
                 </li>
               </ul>
               
-              <div ref={basicContainerRef} className="paypal-button-container">
-                {/* PayPal button will be rendered here */}
-              </div>
+              <button
+                onClick={() => handleSubscribe('basic', setLoading)}
+                disabled={loading === 'basic'}
+                className="w-full py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition disabled:opacity-50"
+              >
+                {loading === 'basic' ? 'Redirecting...' : 'Subscribe'}
+              </button>
             </div>
 
             {/* Pro - Monthly */}
@@ -315,9 +216,13 @@ export default function PricingPage() {
                 </li>
               </ul>
               
-              <div ref={proContainerRef} className="paypal-button-container">
-                {/* PayPal button will be rendered here */}
-              </div>
+              <button
+                onClick={() => handleSubscribe('pro', setLoading)}
+                disabled={loading === 'pro'}
+                className="w-full py-3 bg-purple-600 text-white rounded-lg font-bold hover:bg-purple-700 transition disabled:opacity-50"
+              >
+                {loading === 'pro' ? 'Redirecting...' : 'Subscribe'}
+              </button>
             </div>
           </div>
         </div>
@@ -373,9 +278,13 @@ export default function PricingPage() {
                 </li>
               </ul>
               
-              <div ref={starterContainerRef} className="paypal-button-container">
-                {/* PayPal button will be rendered here */}
-              </div>
+              <button
+                onClick={() => handleBuyCredits('starter', setLoading)}
+                disabled={loading === 'starter'}
+                className="w-full py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition disabled:opacity-50"
+              >
+                {loading === 'starter' ? 'Redirecting...' : 'Buy Now'}
+              </button>
             </div>
 
             {/* Popular - 30 Credits */}
@@ -419,9 +328,13 @@ export default function PricingPage() {
                 </li>
               </ul>
               
-              <div ref={popularContainerRef} className="paypal-button-container">
-                {/* PayPal button will be rendered here */}
-              </div>
+              <button
+                onClick={() => handleBuyCredits('popular', setLoading)}
+                disabled={loading === 'popular'}
+                className="w-full py-3 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 transition disabled:opacity-50"
+              >
+                {loading === 'popular' ? 'Redirecting...' : 'Buy Now'}
+              </button>
             </div>
 
             {/* Pro Pack - 80 Credits */}
@@ -461,9 +374,13 @@ export default function PricingPage() {
                 </li>
               </ul>
               
-              <div ref={proPackContainerRef} className="paypal-button-container">
-                {/* PayPal button will be rendered here */}
-              </div>
+              <button
+                onClick={() => handleBuyCredits('pro_pack', setLoading)}
+                disabled={loading === 'pro_pack'}
+                className="w-full py-3 bg-purple-600 text-white rounded-lg font-semibold hover:bg-purple-700 transition disabled:opacity-50"
+              >
+                {loading === 'pro_pack' ? 'Redirecting...' : 'Buy Now'}
+              </button>
             </div>
           </div>
         </div>
@@ -540,7 +457,7 @@ export default function PricingPage() {
 
             <details className="group border border-gray-200 rounded-lg bg-white">
               <summary className="flex items-center justify-between p-4 cursor-pointer font-semibold text-gray-900">
-                What payment methods do you accept?
+                What payment methods do we accept?
                 <span className="ml-2 group-open:rotate-180 transition-transform">▼</span>
               </summary>
               <p className="p-4 text-gray-600 border-t border-gray-100">

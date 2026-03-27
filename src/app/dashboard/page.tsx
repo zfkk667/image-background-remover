@@ -15,6 +15,10 @@ interface Session {
   user?: User
   quota?: {
     total: number
+    free_remaining: number
+    credits_purchased: number
+    subscription_tier: string | null
+    subscription_status: string | null
   }
 }
 
@@ -33,6 +37,15 @@ export default function DashboardPage() {
         setLoading(false)
       })
   }, [])
+
+  const handleSignOut = async () => {
+    try {
+      await fetch('/api/auth/session', { method: 'DELETE' })
+      window.location.href = '/'
+    } catch (error) {
+      console.error('Sign out error:', error)
+    }
+  }
 
   if (loading) {
     return (
@@ -71,6 +84,12 @@ export default function DashboardPage() {
           <Link href="/" className="text-sm text-gray-500 hover:text-gray-700 flex items-center gap-2">
             ← Back to home
           </Link>
+          <button
+            onClick={handleSignOut}
+            className="text-sm text-red-500 hover:text-red-700 flex items-center gap-2 ml-4"
+          >
+            退出登录
+          </button>
         </div>
       </header>
 
@@ -105,6 +124,42 @@ export default function DashboardPage() {
                 {session.quota?.total ?? 0}
               </div>
             </div>
+          </div>
+        </div>
+
+        {/* Subscription Info */}
+        {session.quota?.subscription_tier && (
+          <div className="bg-gradient-to-r from-purple-500 to-indigo-600 rounded-xl shadow-sm p-6 mb-8 text-white">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-bold mb-1">🌟 {session.quota.subscription_tier === 'basic' ? 'Basic' : 'Pro'} Subscription</h3>
+                <p className="text-purple-100 text-sm">
+                  {session.quota.subscription_status === 'active' ? '✓ Active' : session.quota.subscription_status === 'cancelled' ? '✗ Cancelled' : 'Status: ' + (session.quota.subscription_status || 'Unknown')}
+                </p>
+              </div>
+              <div className="text-right">
+                <div className="text-sm text-purple-100">Monthly Credits</div>
+                <div className="text-2xl font-bold">
+                  {session.quota.subscription_tier === 'basic' ? '25' : '60'}/mo
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Credits Breakdown */}
+        <div className="grid grid-cols-3 gap-4 mb-8">
+          <div className="bg-white rounded-xl shadow-sm p-4 text-center">
+            <div className="text-2xl font-bold text-blue-600">{session.quota?.free_remaining ?? 0}</div>
+            <div className="text-sm text-gray-500">Free Credits</div>
+          </div>
+          <div className="bg-white rounded-xl shadow-sm p-4 text-center">
+            <div className="text-2xl font-bold text-green-600">{session.quota?.credits_purchased ?? 0}</div>
+            <div className="text-sm text-gray-500">Purchased Credits</div>
+          </div>
+          <div className="bg-white rounded-xl shadow-sm p-4 text-center">
+            <div className="text-2xl font-bold text-purple-600">{session.quota?.total ?? 0}</div>
+            <div className="text-sm text-gray-500">Total Credits</div>
           </div>
         </div>
 

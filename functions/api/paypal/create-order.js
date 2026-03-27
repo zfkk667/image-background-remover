@@ -1,16 +1,42 @@
 /**
  * PayPal Create Order API - One-time Credit Purchase
  * POST /api/paypal/create-order
- * Body: { plan: 'starter' | 'popular' | 'pro_pack', credits: number }
+ * Body: { plan: 'starter' | 'popular' | 'pro_pack' }
  */
 
 export async function onRequestPost(context) {
   const { request, env } = context
-  const { PLATFORM_CLIENT_ID, PLATFORM_CLIENT_SECRET, PAYPAL_API_BASE } = env
+  const { PAYPAL_CLIENT_ID, PAYPAL_CLIENT_SECRET, PAYPAL_API_BASE } = env
+  const API_BASE = PAYPAL_API_BASE || 'https://api-m.sandbox.paypal.com'
+  const CLIENT_ID = PAYPAL_CLIENT_ID
+  const CLIENT_SECRET = PAYPAL_CLIENT_SECRET
 
   try {
     const body = await request.json()
-    const { plan, credits } = body
+    const { plan, userId } = body
+    
+    // userId can be passed from frontend or from session cookie fallback
+    let finalUserId = userId
+    if (!finalUserId) {
+      const cookieHeader = request.headers.get('Cookie') || ''
+      const cookies = Object.fromEntries(
+        cookieHeader.split(';').map(c => {
+          const [key, ...val] = c.trim().split('=')
+          return [key, val.join('=')]
+        })
+      )
+      const sessionCookie = cookies['session']
+      if (sessionCookie) {
+        try {
+          const sessionData = JSON.parse(atob(sessionCookie))
+          if (sessionData.exp > Date.now()) {
+            finalUserId = sessionData.sub
+          }
+        } catch (e) {
+          console.log('Failed to parse session:', e)
+        }
+      }
+    }
 
     // Plan pricing configuration
     const plans = {
@@ -28,11 +54,11 @@ export async function onRequestPost(context) {
     }
 
     // Get PayPal access token
-    const authResponse = await fetch(`${PAYPAL_API_BASE}/v1/oauth2/token`, {
+    const authResponse = await fetch(`${API_BASE}/v1/oauth2/token`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
-        'Authorization': `Basic ${btoa(`${PLATFORM_CLIENT_ID}:${PLATFORM_CLIENT_SECRET}`)}`,
+        'Authorization': `Basic ${btoa(`${CLIENT_ID}:${CLIENT_SECRET}`)}`,
       },
       body: 'grant_type=client_credentials',
     })
@@ -49,7 +75,7 @@ export async function onRequestPost(context) {
     const { access_token } = await authResponse.json()
 
     // Create PayPal order
-    const orderResponse = await fetch(`${PAYPAL_API_BASE}/v2/checkout/orders`, {
+    const orderResponse = await fetch(`${API_BASE}/v2/checkout/orders`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -65,7 +91,7 @@ export async function onRequestPost(context) {
               currency_code: 'USD',
               value: selectedPlan.amount,
             },
-            custom_id: JSON.stringify({ plan, credits: selectedPlan.credits }),
+            custom_id: JSON.stringify({ plan, credits: selectedPlan.credits, userId: finalUserId }),
           },
         ],
         application_context: {
@@ -89,9 +115,13 @@ export async function onRequestPost(context) {
 
     const order = await orderResponse.json()
 
+    // Find the approval URL from links
+    const approvalUrl = order.links?.find(link => link.rel === 'approve')?.href
+
     return new Response(JSON.stringify({
       orderID: order.id,
       status: order.status,
+      approvalUrl,
     }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },

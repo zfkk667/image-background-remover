@@ -6,78 +6,91 @@
 
 export async function onRequestPost(context) {
   const { request, env } = context
-  const { PLATFORM_CLIENT_ID, PLATFORM_CLIENT_SECRET, PAYPAL_API_BASE, DB } = env
+  const { DB } = env
 
   try {
-    const body = await request.text()
-    const headers = Object.fromEntries(request.headers)
+    const body = await request.json()
+    console.log('PayPal webhook event:', body.event_type)
 
-    // Get PayPal access token for verification
-    const authResponse = await fetch(`${PAYPAL_API_BASE}/v1/oauth2/token`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'Authorization': `Basic ${btoa(`${PLATFORM_CLIENT_ID}:${PLATFORM_CLIENT_SECRET}`)}`,
-      },
-      body: 'grant_type=client_credentials',
-    })
-
-    if (!authResponse.ok) {
-      console.error('PayPal auth failed')
-      return new Response('Unauthorized', { status: 401 })
-    }
-
-    const { access_token } = await authResponse.json()
-
-    // Verify webhook signature (in production, you should verify this)
-    // For now, we'll process the event directly
-
-    const event = JSON.parse(body)
-    console.log('PayPal webhook event:', event.event_type)
-
-    switch (event.event_type) {
+    switch (body.event_type) {
       case 'PAYMENT.CAPTURE.COMPLETED': {
         // One-time payment completed - add credits to user
-        const purchaseUnit = event.resource?.purchase_units?.[0]
+        const resource = body.resource
+        const purchaseUnit = resource?.purchase_units?.[0]
+        
         if (purchaseUnit?.custom_id) {
-          const { plan, credits } = JSON.parse(purchaseUnit.custom_id)
-          const userId = event.resource?.custom_id || event.resource?.payer?.payer_id
+          const { plan, credits, userId } = JSON.parse(purchaseUnit.custom_id)
           
-          console.log(`Payment completed: ${plan}, credits: ${credits}, userId: ${userId}`)
+          console.log(`Payment completed: plan=${plan}, credits=${credits}, userId=${userId}`)
           
-          // If DB is available, add credits to user
           if (DB && userId) {
-            await DB.prepare(
-              'UPDATE users SET quota_remaining = quota_remaining + ? WHERE google_id = ?'
-            ).bind(credits, userId).run()
+            // Try to find user by google_id first
+            const user = await DB.prepare(
+              'SELECT * FROM users WHERE google_id = ?'
+            ).bind(userId).first()
+            
+            // If found, add credits
+            if (user) {
+              await DB.prepare(
+                'UPDATE users SET quota_remaining = quota_remaining + ? WHERE id = ?'
+              ).bind(credits, user.id).run()
+              console.log(`Added ${credits} credits to user ${user.email}`)
+            } else {
+              console.log(`User not found for google_id ${userId}`)
+            }
           }
         }
         break
       }
 
+      case 'CHECKOUT.ORDER.APPROVED': {
+        console.log('Order approved, waiting for capture...')
+        break
+      }
+
       case 'BILLING.SUBSCRIPTION.ACTIVATED':
       case 'BILLING.SUBSCRIPTION.REACTIVATED': {
-        // Subscription started/reactivated - set up monthly quota
-        const subscription = event.resource
+        const subscription = body.resource
         if (subscription?.custom_id) {
-          const { plan, credits } = JSON.parse(subscription.custom_id)
-          const subscriberId = subscription.subscriber?.payer_id
+          const { plan, credits, userId } = JSON.parse(subscription.custom_id)
+          const subscriberEmail = subscription.subscriber?.email_address
           
-          console.log(`Subscription activated: ${plan}, credits: ${credits}, subscriberId: ${subscriberId}`)
+          console.log(`Subscription activated: plan=${plan}, credits=${credits}, userId=${userId}, email=${subscriberEmail}`)
           
-          // Update user subscription status in DB
-          if (DB && subscriberId) {
-            await DB.prepare(
-              'UPDATE users SET subscription_id = ?, subscription_plan = ?, quota_remaining = ?, subscription_status = ? WHERE google_id = ?'
-            ).bind(subscription.id, plan, credits, 'active', subscriberId).run()
+          if (DB && userId) {
+            // Try to find user by google_id (userId) first
+            const user = await DB.prepare(
+              'SELECT * FROM users WHERE google_id = ?'
+            ).bind(userId).first()
+            
+            if (user) {
+              await DB.prepare(
+                'UPDATE users SET subscription_id = ?, subscription_plan = ?, quota_remaining = quota_remaining + ?, subscription_status = ? WHERE id = ?'
+              ).bind(subscription.id, plan, credits, 'active', user.id).run()
+              console.log(`Subscription activated for user ${user.email} (google_id: ${userId})`)
+            } else {
+              console.log(`User not found for google_id ${userId}, trying email...`)
+              // Fallback: try to match by email
+              if (subscriberEmail) {
+                const userByEmail = await DB.prepare(
+                  'SELECT * FROM users WHERE email = ?'
+                ).bind(subscriberEmail).first()
+                
+                if (userByEmail) {
+                  await DB.prepare(
+                    'UPDATE users SET subscription_id = ?, subscription_plan = ?, quota_remaining = quota_remaining + ?, subscription_status = ? WHERE id = ?'
+                  ).bind(subscription.id, plan, credits, 'active', userByEmail.id).run()
+                  console.log(`Subscription activated for user ${userByEmail.email} (by email)`)
+                }
+              }
+            }
           }
         }
         break
       }
 
       case 'BILLING.SUBSCRIPTION.CANCELLED': {
-        // Subscription cancelled
-        const subscription = event.resource
+        const subscription = body.resource
         console.log(`Subscription cancelled: ${subscription.id}`)
         
         if (DB) {
@@ -88,28 +101,47 @@ export async function onRequestPost(context) {
         break
       }
 
-      case 'BILLING.SUBSCRIPTION.SUSPENDED': {
-        // Subscription suspended due to payment failure
-        const subscription = event.resource
-        console.log(`Subscription suspended: ${subscription.id}`)
+      case 'BILLING.SUBSCRIPTION.PAYMENT.FAILED': {
+        const subscription = body.resource
+        console.log(`Subscription payment failed: ${subscription.id}`)
         
         if (DB) {
           await DB.prepare(
             'UPDATE users SET subscription_status = ? WHERE subscription_id = ?'
-          ).bind('suspended', subscription.id).run()
+          ).bind('payment_failed', subscription.id).run()
         }
         break
       }
 
       case 'PAYMENT.SALE.COMPLETED': {
-        // Recurring payment for subscription
-        const sale = event.resource
-        console.log(`Recurring payment completed: ${sale.id}, amount: ${sale.amount?.value}`)
+        // Recurring payment completed - add credits for subscription cycle
+        const sale = body.resource
+        console.log(`Recurring payment completed: sale_id=${sale.id}, amount=${sale.amount?.total}`)
+        
+        if (DB && sale?.custom_id) {
+          try {
+            const { plan, credits, userId } = JSON.parse(sale.custom_id)
+            if (userId) {
+              const user = await DB.prepare(
+                'SELECT * FROM users WHERE google_id = ?'
+              ).bind(userId).first()
+              
+              if (user) {
+                await DB.prepare(
+                  'UPDATE users SET quota_remaining = quota_remaining + ? WHERE id = ?'
+                ).bind(credits, user.id).run()
+                console.log(`Added ${credits} credits for subscription renewal to user ${user.email}`)
+              }
+            }
+          } catch (e) {
+            console.log('Failed to parse custom_id from sale:', e)
+          }
+        }
         break
       }
 
       default:
-        console.log(`Unhandled event type: ${event.event_type}`)
+        console.log(`Unhandled event type: ${body.event_type}`)
     }
 
     return new Response('OK', { status: 200 })
