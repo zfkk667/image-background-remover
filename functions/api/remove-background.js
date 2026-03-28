@@ -6,7 +6,7 @@
 export async function onRequestPost(context) {
   const { request, env } = context
   
-  const REMOVEBG_API_KEY = env.REMOVEBG_API_KEY || 'a6nJq58bzE1guyFGRjaao9P6'
+  const REMOVEBG_API_KEY = env.REMOVE_BG_API_KEY
   
   try {
     // 获取 session cookie
