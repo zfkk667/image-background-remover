@@ -504,6 +504,26 @@ export default function PricingPage() {
           <p>&copy; 2026 AI Background Remover. All rights reserved.</p>
         </div>
       </footer>
+
+      {/* Pricing Page Schema */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            '@context': 'https://schema.org',
+            '@type': 'WebPage',
+            name: 'Pricing - AI Background Remover',
+            description:
+              'Flexible pricing plans for AI background removal service. Buy credits (one-time) or subscribe monthly. Plans from $4.99 to $19.99/mo.',
+            url: 'https://image-bg-remover.shop/pricing',
+            isPartOf: {
+              '@type': 'WebSite',
+              name: 'AI Background Remover',
+              url: 'https://image-bg-remover.shop/',
+            },
+          }),
+        }}
+      />
     </div>
   )
 }

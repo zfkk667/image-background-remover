@@ -329,6 +329,59 @@ export default function Home() {
       <footer className="text-center py-6 text-xs text-gray-400">
         <p>图片在本地处理，不会上传到服务器 · 保护您的隐私</p>
       </footer>
+
+      {/* FAQ Schema for Google Rich Results */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            '@context': 'https://schema.org',
+            '@type': 'FAQPage',
+            mainEntity: [
+              {
+                '@type': 'Question',
+                name: 'AI 背景移除支持哪些图片格式？',
+                acceptedAnswer: {
+                  '@type': 'Answer',
+                  text: '支持 JPG、JPEG、PNG、WebP 格式，单张图片最大 10MB。',
+                },
+              },
+              {
+                '@type': 'Question',
+                name: '图片处理速度如何？',
+                acceptedAnswer: {
+                  '@type': 'Answer',
+                  text: '单张图片处理时间通常在 3-5 秒内完成。',
+                },
+              },
+              {
+                '@type': 'Question',
+                name: '我的图片会上传到服务器吗？',
+                acceptedAnswer: {
+                  '@type': 'Answer',
+                  text: '图片在本地浏览器处理，不会上传到服务器，保护您的隐私。',
+                },
+              },
+              {
+                '@type': 'Question',
+                name: '支持批量处理吗？',
+                acceptedAnswer: {
+                  '@type': 'Answer',
+                  text: '支持批量上传，每次最多 20 张图片同时处理。',
+                },
+              },
+              {
+                '@type': 'Question',
+                name: '处理后的图片质量如何？',
+                acceptedAnswer: {
+                  '@type': 'Answer',
+                  text: '处理后图片分辨率保持不变，背景透明度 100%，主体边缘准确度 ≥95%。',
+                },
+              },
+            ],
+          }),
+        }}
+      />
     </div>
   )
 }
