@@ -1,20 +1,101 @@
+'use client'
+
 /**
  * Subscription Page
- * Handles plan upgrades (PayPal integration coming soon)
+ * Handles plan upgrades via PayPal Monthly Subscription
+ * Integrates with /api/paypal/create-subscription backend
  */
 
+import { useState, useEffect, Suspense } from 'react'
 import Link from 'next/link'
-import { Suspense } from 'react'
+import { useSearchParams } from 'next/navigation'
 
+// Plan configuration (matches backend PayPal plan IDs)
 const plans = [
-  { id: 'basic', name: '基础版', monthly_quota: 100, price_cny: 19, price_usd: 5, yearly_cny: 169, features: ['100张图片/月', '优先处理', '批量处理'] },
-  { id: 'pro', name: '专业版', monthly_quota: 500, price_cny: 49, price_usd: 15, yearly_cny: 429, features: ['500张图片/月', '优先处理', '批量处理', 'API访问'] },
-  { id: 'enterprise', name: '企业版', monthly_quota: 2000, price_cny: 149, price_usd: 50, yearly_cny: 1299, features: ['2000张图片/月', '优先处理', '无限批量', 'API访问', '团队管理', '专属客服'] },
+  { 
+    id: 'basic', 
+    name: '基础版', 
+    description: '适合轻度使用',
+    monthly_quota: 25, 
+    price_usd: 9.99, 
+    price_cny: 69,
+    yearly_cny: 599,
+    features: ['25张图片/月', '优先处理', '批量处理', '支持 PNG/JPG/WebP'],
+    paypal_plan_id: 'P-0MS15850SN341105ENHCLINQ',
+  },
+  { 
+    id: 'pro', 
+    name: '专业版', 
+    description: '适合设计师和电商',
+    monthly_quota: 60, 
+    price_usd: 19.99, 
+    price_cny: 129,
+    yearly_cny: 1099,
+    features: ['60张图片/月', '优先处理', '批量处理', 'API访问', '支持 PNG/JPG/WebP'],
+    paypal_plan_id: 'P-3EP04297XE993681DNHCLIPQ',
+  },
 ]
 
+// Get session user info
+async function getSession() {
+  try {
+    const res = await fetch('/api/auth/session')
+    const data = await res.json()
+    return data.authenticated ? data.user : null
+  } catch {
+    return null
+  }
+}
+
+// Create subscription via API and redirect to PayPal
+async function handleSubscribe(planId: string, setLoading: (v: boolean) => void) {
+  setLoading(true)
+  try {
+    const user = await getSession()
+    if (!user) {
+      alert('请先登录后再订阅')
+      window.location.href = '/login'
+      return
+    }
+    
+    const response = await fetch('/api/paypal/create-subscription', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ plan: planId, userId: user.sub }),
+    })
+    const data = await response.json()
+    
+    if (!response.ok) {
+      throw new Error(data.error || 'Failed to create subscription')
+    }
+    
+    if (data.approvalUrl) {
+      window.location.href = data.approvalUrl
+    } else {
+      alert('无法连接 PayPal，请稍后重试')
+    }
+  } catch (error) {
+    console.error('Subscription error:', error)
+    alert('订阅创建失败，请稍后重试')
+  }
+  setLoading(false)
+}
+
 function SubscribeContent() {
-  const selectedPlan = 'pro'
-  const plan = plans.find(p => p.id === selectedPlan) || plans[1]
+  const searchParams = useSearchParams()
+  const initialPlan = searchParams.get('plan') || 'pro'
+  const [selectedPlanId, setSelectedPlanId] = useState(initialPlan)
+  const [loading, setLoading] = useState(false)
+  const [showYearly, setShowYearly] = useState(false)
+
+  const selectedPlan = plans.find(p => p.id === selectedPlanId) || plans[1]
+
+  useEffect(() => {
+    const planParam = searchParams.get('plan')
+    if (planParam && plans.find(p => p.id === planParam)) {
+      setSelectedPlanId(planParam)
+    }
+  }, [searchParams])
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -34,101 +115,162 @@ function SubscribeContent() {
         </div>
       </header>
 
-      <main className="max-w-4xl mx-auto px-4 py-12">
-        <div className="text-center mb-12">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">升级到 {plan.name}</h1>
-          <p className="text-gray-600">解锁更多额度，高效处理图片</p>
+      <main className="max-w-5xl mx-auto px-4 py-12">
+        <div className="text-center mb-10">
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">升级到 {selectedPlan.name}</h1>
+          <p className="text-gray-600">{selectedPlan.description} · 每月 {selectedPlan.monthly_quota} 张图片</p>
         </div>
 
-        {/* Selected Plan */}
+        {/* Plan Selection Tabs */}
+        <div className="flex justify-center gap-4 mb-8">
+          {plans.map(plan => (
+            <button
+              key={plan.id}
+              onClick={() => setSelectedPlanId(plan.id)}
+              className={`px-6 py-3 rounded-lg font-medium transition ${
+                selectedPlanId === plan.id
+                  ? 'bg-blue-600 text-white shadow-md'
+                  : 'bg-white text-gray-600 hover:bg-gray-50 border border-gray-200'
+              }`}
+            >
+              {plan.name} · ¥{plan.price_cny}/月
+            </button>
+          ))}
+        </div>
+
+        {/* Selected Plan Card */}
         <div className="bg-white rounded-2xl shadow-xl p-8 mb-8 border-2 border-blue-500">
           <div className="flex items-center justify-between mb-6">
             <div>
-              <h2 className="text-2xl font-bold text-gray-900">{plan.name}</h2>
-              <p className="text-gray-500">{plan.monthly_quota} 张图片/月</p>
+              <h2 className="text-2xl font-bold text-gray-900">{selectedPlan.name}</h2>
+              <p className="text-gray-500">{selectedPlan.monthly_quota} 张图片/月</p>
             </div>
             <div className="text-right">
-              <div className="text-4xl font-bold text-blue-600">¥{plan.price_cny}</div>
+              <div className="text-4xl font-bold text-blue-600">¥{selectedPlan.price_cny}</div>
               <p className="text-gray-500">/月</p>
             </div>
           </div>
 
-          <ul className="space-y-2 mb-8">
-            {plan.features.map((feature, i) => (
+          <ul className="space-y-3 mb-8">
+            {selectedPlan.features.map((feature, i) => (
               <li key={i} className="flex items-center gap-2 text-gray-700">
                 <span className="text-green-500">✓</span> {feature}
               </li>
             ))}
           </ul>
 
-          {/* Payment Options */}
+          {/* Payment Section */}
           <div className="border-t pt-6">
             <h3 className="text-lg font-semibold mb-4">选择支付方式</h3>
             
-            {/* Coming Soon Notice */}
-            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4">
-              <div className="flex items-center gap-2 text-amber-800">
-                <span className="text-xl">🚧</span>
-                <span className="font-medium">支付功能正在接入中</span>
-              </div>
-              <p className="text-amber-700 text-sm mt-1">
-                PayPal 支付即将开通，请耐心等待。开通后我们会通过邮件通知您。
+            {/* PayPal Button */}
+            <div className="mb-4">
+              <button
+                onClick={() => handleSubscribe(selectedPlanId, setLoading)}
+                disabled={loading}
+                className="w-full py-4 px-6 bg-[#0070ba] hover:bg-[#005ea6] text-white rounded-lg font-medium transition flex items-center justify-center gap-3 disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                {loading ? (
+                  <>
+                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    正在连接 PayPal...
+                  </>
+                ) : (
+                  <>
+                    <span className="text-xl">🅿️</span>
+                    <span>用 PayPal 订阅 {selectedPlan.name}</span>
+                  </>
+                )}
+              </button>
+              <p className="text-xs text-gray-400 mt-2 text-center">
+                PayPal 安全支付 · 随时可在 PayPal 中取消订阅
               </p>
             </div>
 
-            {/* Payment Buttons (Disabled) */}
-            <div className="grid md:grid-cols-2 gap-4">
-              <button disabled className="py-3 px-6 bg-gray-100 text-gray-400 rounded-lg font-medium cursor-not-allowed">
-                🅿️ PayPal (即将支持)
-              </button>
-              <button disabled className="py-3 px-6 bg-gray-100 text-gray-400 rounded-lg font-medium cursor-not-allowed">
-                💳 信用卡 (即将支持)
-              </button>
+            {/* Divider */}
+            <div className="flex items-center gap-4 my-6">
+              <div className="flex-1 h-px bg-gray-200" />
+              <span className="text-sm text-gray-400">或</span>
+              <div className="flex-1 h-px bg-gray-200" />
             </div>
 
             {/* Yearly Option */}
-            <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+            <div 
+              className={`p-4 rounded-lg border cursor-pointer transition ${
+                showYearly 
+                  ? 'border-blue-500 bg-blue-50' 
+                  : 'border-gray-200 bg-gray-50 hover:border-blue-300'
+              }`}
+              onClick={() => setShowYearly(!showYearly)}
+            >
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="font-medium text-blue-900">年付优惠</p>
-                  <p className="text-sm text-blue-700">年付立省 ¥{(plan.price_cny * 12) - plan.yearly_cny}</p>
+                  <p className="font-medium text-gray-900">年付优惠 🔥</p>
+                  <p className="text-sm text-green-600">立省 ¥{(selectedPlan.price_cny * 12) - selectedPlan.yearly_cny}</p>
                 </div>
                 <div className="text-right">
-                  <p className="text-2xl font-bold text-blue-600">¥{plan.yearly_cny}</p>
-                  <p className="text-sm text-blue-700">/年（≈¥{Math.round(plan.yearly_cny / 12)}/月）</p>
+                  <p className="text-2xl font-bold text-blue-600">¥{selectedPlan.yearly_cny}</p>
+                  <p className="text-sm text-gray-500">/年（≈¥{Math.round(selectedPlan.yearly_cny / 12)}/月）</p>
                 </div>
               </div>
+              
+              {showYearly && (
+                <div className="mt-4 pt-4 border-t border-blue-200">
+                  <p className="text-sm text-gray-600 mb-3">
+                    年付包含 12 个月月度额度 ({selectedPlan.monthly_quota} 张/月 × 12 = {selectedPlan.monthly_quota * 12} 张)
+                  </p>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      alert('年付订阅功能即将上线，请先选择月度订阅')
+                    }}
+                    className="w-full py-2 px-4 bg-gray-800 hover:bg-gray-900 text-white rounded-lg font-medium transition text-sm"
+                  >
+                    联系客服开通年付
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>
 
-        {/* Other Plans */}
-        <div className="mb-8">
-          <h3 className="text-lg font-semibold mb-4">或选择其他套餐</h3>
-          <div className="grid md:grid-cols-2 gap-4">
-            {plans.filter(p => p.id !== selectedPlan).map(p => (
-              <Link 
-                key={p.id}
-                href={`/subscribe?plan=${p.id}`}
-                className="bg-white rounded-xl shadow-sm p-4 border border-gray-200 hover:border-blue-300 transition"
-              >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-bold text-gray-900">{p.name}</p>
-                    <p className="text-sm text-gray-500">{p.monthly_quota} 张/月</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-xl font-bold text-gray-900">¥{p.price_cny}</p>
-                    <p className="text-sm text-gray-500">/月</p>
-                  </div>
-                </div>
-              </Link>
-            ))}
+        {/* Trust Badges */}
+        <div className="flex justify-center gap-8 text-sm text-gray-500 mb-8">
+          <div className="flex items-center gap-2">
+            <span>🔒</span>
+            <span>PayPal 安全支付</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span>🔄</span>
+            <span>随时取消</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span>📧</span>
+            <span>24h 内收到确认邮件</span>
+          </div>
+        </div>
+
+        {/* FAQ */}
+        <div className="bg-white rounded-xl shadow-sm p-6">
+          <h3 className="font-semibold text-gray-900 mb-4">常见问题</h3>
+          <div className="space-y-3 text-sm text-gray-600">
+            <details className="group">
+              <summary className="cursor-pointer font-medium text-gray-700">订阅后如何取消？</summary>
+              <p className="mt-2 text-gray-500">您可以随时在 PayPal 中取消订阅，取消后当前计费周期内仍可使用，下个周期不再扣费。</p>
+            </details>
+            <details className="group">
+              <summary className="cursor-pointer font-medium text-gray-700">额度用完怎么办？</summary>
+              <p className="mt-2 text-gray-500">您可以在 Dashboard 中购买额外额度，或者等下个计费周期额度重置。</p>
+            </details>
+            <details className="group">
+              <summary className="cursor-pointer font-medium text-gray-700">支持哪些图片格式？</summary>
+              <p className="mt-2 text-gray-500">支持 JPG、PNG、WebP 格式，单张图片最大 10MB。</p>
+            </details>
           </div>
         </div>
 
         {/* Back Link */}
-        <div className="text-center">
+        <div className="text-center mt-8">
           <Link href="/pricing" className="text-blue-600 hover:underline">
             ← 返回定价页面
           </Link>
@@ -147,7 +289,7 @@ function SubscribeContent() {
 
 export default function SubscribePage() {
   return (
-    <Suspense fallback={<div>加载中...</div>}>
+    <Suspense fallback={<div className="min-h-screen bg-gray-50 flex items-center justify-center"><div className="text-gray-500">加载中...</div></div>}>
       <SubscribeContent />
     </Suspense>
   )
