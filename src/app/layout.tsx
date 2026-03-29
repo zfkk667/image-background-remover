@@ -40,7 +40,7 @@ export const metadata: Metadata = {
     locale: 'zh_CN',
     url: 'https://image-bg-remover.shop/',
     siteName: 'AI 图片背景移除',
-    title: 'AI 图片背景移除工具 - 一键智能去除图片背景',
+    title: 'AI图片背景移除 - 一键智能抠图',
     description: '免费 AI 智能图片背景移除工具，支持批量处理，5秒完成。支持 PNG/JPG/WebP。',
     images: [
       {
