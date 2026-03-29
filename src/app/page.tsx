@@ -80,9 +80,10 @@ export default function Home() {
       setImages(prev => prev.map(i =>
         i.id === item.id ? { ...i, status: 'done', resultUrl, progress: 100 } : i
       ))
-    } catch (err: any) {
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown error'
       setImages(prev => prev.map(i =>
-        i.id === item.id ? { ...i, status: 'error', error: err.message, progress: 0 } : i
+        i.id === item.id ? { ...i, status: 'error', error: message, progress: 0 } : i
       ))
     }
   }

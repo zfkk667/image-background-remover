@@ -1,9 +1,4 @@
-User-agent: *
+User-Agent: *
 Allow: /
-Disallow: /api/
-Disallow: /dashboard
-Disallow: /_next/
-Disallow: /auth/
 
 Sitemap: https://image-bg-remover.shop/sitemap.xml
-Crawl-delay: 1

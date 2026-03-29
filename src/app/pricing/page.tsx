@@ -7,7 +7,7 @@
  * Uses PayPal Checkout redirect flow
  */
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import Link from 'next/link'
 
 // Get user info from session
@@ -441,7 +441,7 @@ export default function PricingPage() {
                 <span className="ml-2 group-open:rotate-180 transition-transform">▼</span>
               </summary>
               <p className="p-4 text-gray-600 border-t border-gray-100">
-                Purchased credits never expire. Buy once, use whenever you need. They're yours forever. Note: Monthly subscription credits reset each month and do not roll over.
+                Purchased credits never expire. Buy once, use whenever you need. They&apos;re yours forever. Note: Monthly subscription credits reset each month and do not roll over.
               </p>
             </details>
 
@@ -491,7 +491,7 @@ export default function PricingPage() {
                 <span className="ml-2 group-open:rotate-180 transition-transform">▼</span>
               </summary>
               <p className="p-4 text-gray-600 border-t border-gray-100">
-                You can cancel your subscription anytime from your Dashboard. Your remaining credits will still be usable until the end of your billing period. We don't provide refunds for partially unused periods.
+                You can cancel your subscription anytime from your Dashboard. Your remaining credits will still be usable until the end of your billing period. We don&apos;t provide refunds for partially unused periods.
               </p>
             </details>
           </div>
