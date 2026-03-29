@@ -4,11 +4,11 @@ import Providers from './providers'
 
 export const metadata: Metadata = {
   title: {
-    default: 'AI 图片背景移除工具 - 一键智能去除图片背景',
-    template: '%s | AI 图片背景移除',
+    default: 'AI图片背景移除 - 一键智能抠图去背景',
+    template: '%s | AI图片背景移除',
   },
   description:
-    '免费 AI 智能图片背景移除工具，支持 PNG/JPG/WebP，批量处理最高20张，5秒完成。适用于电商产品图、人像证件照、设计素材。',
+    '免费AI智能图片背景移除工具，5秒一键抠图去背景。支持PNG/JPG/WebP格式，批量处理最高20张。适用于电商产品图、人像证件照、设计素材，无需注册即可使用。',
   keywords: [
     '图片背景移除',
     'AI抠图',

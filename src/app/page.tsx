@@ -147,6 +147,7 @@ export default function Home() {
           </div>
           <div className="flex items-center gap-4">
             <a href="/pricing" className="text-sm text-blue-600 hover:text-blue-700 font-medium">💰 定价</a>
+            <a href="/subscribe" className="text-sm text-blue-600 hover:text-blue-700 font-medium">⭐ 订阅</a>
             <div className="text-sm text-gray-500">支持 JPG · PNG · WebP · 最大 10MB</div>
             <AuthButton />
           </div>
@@ -173,6 +174,7 @@ export default function Home() {
             multiple
             className="hidden"
             onChange={handleFileInput}
+            aria-label="上传图片文件"
           />
           <div className="text-5xl mb-4">🖼️</div>
           <p className="text-xl font-semibold text-gray-700 mb-2">拖拽图片到此处，或点击上传</p>
@@ -181,6 +183,34 @@ export default function Home() {
             <p className="mt-3 text-sm text-blue-600 font-medium">已上传 {images.length}/20 张</p>
           )}
         </div>
+
+        {/* Features Section */}
+        {images.length === 0 && (
+          <div className="bg-white rounded-2xl shadow-sm p-8">
+            <div className="grid md:grid-cols-3 gap-8 text-center">
+              <div>
+                <div className="text-3xl mb-3">⚡</div>
+                <h3 className="font-semibold text-gray-900 mb-2">AI 智能识别</h3>
+                <p className="text-sm text-gray-600">深度学习算法精准识别前景主体，边缘处理自然无毛刺，适用于复杂场景</p>
+              </div>
+              <div>
+                <div className="text-3xl mb-3">🔒 本地处理</div>
+                <h3 className="font-semibold text-gray-900 mb-2">隐私安全</h3>
+                <p className="text-sm text-gray-600">图片在浏览器本地完成处理，不经过服务器上传，确保您的原始图片安全</p>
+              </div>
+              <div>
+                <div className="text-3xl mb-3">📦 批量处理</div>
+                <h3 className="font-semibold text-gray-900 mb-2">高效便捷</h3>
+                <p className="text-sm text-gray-600">支持一次上传20张图片批量处理，电商卖家、设计师首选生产力工具</p>
+              </div>
+            </div>
+            <div className="text-center mt-8 pt-6 border-t border-gray-100">
+              <p className="text-sm text-gray-500 mb-3">适用于电商产品图、人像证件照、设计素材、海报宣传等场景</p>
+              <a href="/pricing" className="inline-block px-6 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition mr-3">查看定价</a>
+              <a href="/subscribe" className="inline-block px-6 py-3 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 transition">订阅更优惠</a>
+            </div>
+          </div>
+        )}
 
         {/* Action Bar */}
         {images.length > 0 && (
@@ -327,8 +357,14 @@ export default function Home() {
       </main>
 
       {/* Footer */}
-      <footer className="text-center py-6 text-xs text-gray-400">
+      <footer className="text-center py-6 text-xs text-gray-400 space-y-1">
         <p>图片在本地处理，不会上传到服务器 · 保护您的隐私</p>
+        <div className="flex justify-center gap-4 mt-2">
+          <a href="/pricing" className="hover:text-blue-600 transition">定价方案</a>
+          <a href="/subscribe" className="hover:text-blue-600 transition">订阅服务</a>
+          <a href="/terms" className="hover:text-blue-600 transition">服务条款</a>
+          <a href="/privacy" className="hover:text-blue-600 transition">隐私政策</a>
+        </div>
       </footer>
 
       {/* FAQ Schema for Google Rich Results */}

@@ -105,7 +105,7 @@ function SubscribeContent() {
           <Link href="/" className="flex items-center gap-3">
             <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center text-white text-xl">✂️</div>
             <div>
-              <h1 className="text-xl font-bold text-gray-900">AI 背景移除</h1>
+              <span className="text-xl font-bold text-gray-900">AI 背景移除</span>
               <p className="text-xs text-gray-500">智能一键去除图片背景</p>
             </div>
           </Link>

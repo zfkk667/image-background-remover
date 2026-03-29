@@ -1,8 +1,8 @@
 import type { Metadata } from 'next'
 
 export const metadata: Metadata = {
-  title: '定价计划 - 灵活付费方案',
-  description: '灵活的AI图片背景移除定价方案。一次性购买积分永久使用，或订阅月度套餐获得更多额度。积分永不过期。',
+  title: '定价计划 - 积分购买与月度订阅',
+  description: 'AI图片背景移除定价：积分购买永久有效，月度订阅更划算。Starter 5积分$4.99，Popular 20积分$14.99，Pro Pack 60积分$39.99。月度订阅Basic $9.99/25次，Pro $19.99/60次。',
   robots: {
     index: true,
     follow: true,
