@@ -11,7 +11,7 @@
 export async function onRequestGet(context) {
   const { request, env } = context
   const { PAYPAL_CLIENT_ID, PAYPAL_CLIENT_SECRET, PAYPAL_API_BASE } = env
-  const API_BASE = PAYPAL_API_BASE || 'https://api-m.sandbox.paypal.com'
+  const API_BASE = PAYPAL_API_BASE || 'https://api-m.paypal.com' // Default to production
   const CLIENT_ID = PAYPAL_CLIENT_ID
   const CLIENT_SECRET = PAYPAL_CLIENT_SECRET
   
