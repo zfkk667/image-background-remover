@@ -38,21 +38,21 @@ export async function onRequestPost(context) {
       }
     }
 
-    // Subscription plan configuration (PayPal Billing Plan IDs - use existing plans)
+    // Subscription plan configuration (PayPal Billing Plan IDs - PRODUCTION)
     const plans = {
       basic: {
         name: 'Basic Monthly Subscription',
         description: '25 credits per month',
         amount: '9.99',
         credits: 25,
-        plan_id: 'P-0MS15850SN341105ENHCLINQ', // Basic $9.99/month
+        plan_id: 'P-9VR796610D293805PNHFCRFY', // Basic $9.99/month - 25 credits
       },
       pro: {
         name: 'Pro Monthly Subscription',
         description: '60 credits per month',
         amount: '19.99',
         credits: 60,
-        plan_id: 'P-3EP04297XE993681DNHCLIPQ', // Pro $19.99/month
+        plan_id: 'P-28R39130VK8979314NHFCRGA', // Pro $19.99/month - 60 credits
       },
     }
 
